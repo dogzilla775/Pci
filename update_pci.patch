@@ -1,0 +1,88 @@
+--- app/src/main/java/com/example/communication/PciCommunicationLayer.kt
++++ app/src/main/java/com/example/communication/PciCommunicationLayer.kt
+@@ -4,6 +4,9 @@
+ import kotlinx.coroutines.flow.MutableStateFlow
+ import kotlinx.coroutines.flow.StateFlow
+ import kotlinx.coroutines.flow.asStateFlow
++import kotlinx.coroutines.flow.update
++import kotlinx.coroutines.delay
++import kotlinx.coroutines.CoroutineScope
+ 
+ /**
+  * Represents a raw frame from the Chrysler PCI Bus (typically J1850 VPW 10.4 kbps).
+@@ -66,10 +69,32 @@
+     val transTemp: Float = 0f,
+     val speed: Float = 0f
+ )
+ 
++data class NetworkStat(
++    val timestamp: Long,
++    val packetsPerSecond: Int,
++    val errorRate: Float
++)
++
+ /**
+  * Central service handling I/O with the physical hardware interface.
+  */
+ class PciBusManager {
+     private val _connectionState = MutableStateFlow(ConnectionState.DISCONNECTED)
+     val connectionState: StateFlow<ConnectionState> = _connectionState.asStateFlow()
+ 
+     private val _metrics = MutableStateFlow(ObdMetrics())
+     val metrics: StateFlow<ObdMetrics> = _metrics.asStateFlow()
+ 
+     private val _rawFrames = MutableStateFlow<List<PciFrame>>(emptyList())
+     val rawFrames: StateFlow<List<PciFrame>> = _rawFrames.asStateFlow()
++    
++    private val _networkStats = MutableStateFlow<List<NetworkStat>>(emptyList())
++    val networkStats: StateFlow<List<NetworkStat>> = _networkStats.asStateFlow()
++    
++    private var currentSecondPackets = 0
++    private var currentSecondErrors = 0
+ 
+     fun connect(deviceAddress: String) {
+         _connectionState.value = ConnectionState.CONNECTING
+@@ -87,14 +112,32 @@
+     /**
+      * Converts a raw incoming byte stream from the hardware into structured data.
+      */
+     fun processRawBytes(rawStream: ByteArray) {
++        currentSecondPackets++
+         if (rawStream.size >= 4) {
+              val target = rawStream[0].toUByte()
+              val source = rawStream[1].toUByte()
+              val length = rawStream.size.toUByte()
+              val payload = rawStream.sliceArray(3 until rawStream.size - 1)
+              val crc = rawStream.last().toUByte()
+              val frame = PciFrame(target, source, length, payload, crc)
++             
++             // Simulate error detection for UI purposes
++             if (crc.toInt() % 10 == 0) {
++                 currentSecondErrors++
++             }
+              
+              val currentFrames = _rawFrames.value.toMutableList()
+              currentFrames.add(0, frame)
+@@ -103,7 +146,12 @@
+              _rawFrames.value = currentFrames
+              
+              handleFrame(frame)
++        } else {
++            currentSecondErrors++
+         }
+     }
++    
++    fun tickNetworkStats() {
++        val stat = NetworkStat(
++            timestamp = System.currentTimeMillis(),
++            packetsPerSecond = currentSecondPackets,
++            errorRate = if (currentSecondPackets > 0) currentSecondErrors.toFloat() / currentSecondPackets else 0f
++        )
++        _networkStats.update { current ->
++            (current + stat).takeLast(50)
++        }
++        currentSecondPackets = 0
++        currentSecondErrors = 0
++    }
+ 
+     private fun handleFrame(frame: PciFrame) {

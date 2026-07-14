@@ -1,0 +1,6 @@
+{
+  "name": "Proto-PCI",
+  "description": "Advanced PCI CAN Bus diagnostics for Chrysler",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
