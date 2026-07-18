@@ -113,6 +113,10 @@ class PciBusManager {
     private var currentSecondPackets = 0
     private var currentSecondErrors = 0
 
+    fun updateConnectionState(state: ConnectionState) {
+        _connectionState.value = state
+    }
+
     fun connect(deviceAddress: String) {
         _connectionState.value = ConnectionState.CONNECTING
         // TODO: Initiate Bluetooth (e.g., SPP) or USB socket to hardware scanner adapter (ELM327 / STN1110)
